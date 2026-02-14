@@ -242,21 +242,30 @@ def obtener_respuesta_gemini(prompt, historial=None):
             return "⚠️ No se encontró GOOGLE_API_KEY en st.secrets. Configura la clave en Streamlit Cloud o en .streamlit/secrets.toml localmente."
 
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-
+        # Probar modelos en orden (cuentas nuevas suelen tener gemini-2.x)
+        model_names = ('gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash')
         system_instruction = """Eres un asistente experto en análisis de fútbol y scouting de jugadores. 
 Tu rol es ayudar al usuario a entender las gráficas de diagnóstico de equipos de Liga MX y guiarlo en la elección de jugadores recomendados.
 Usa las métricas: creacion_peligro, resiliencia, peligro_ofensivo, solidez_defensiva, indice_faltas, efectivida_puerta, solidez_portero.
 Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario."""
 
-        response = model.generate_content(
-            f"{system_instruction}\n\n{prompt}",
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.4,
-                max_output_tokens=1024,
-            )
-        )
-        return response.text
+        last_error = None
+        for model_name in model_names:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(
+                    f"{system_instruction}\n\n{prompt}",
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.4,
+                        max_output_tokens=1024,
+                    )
+                )
+                return response.text
+            except Exception as e:
+                last_error = e
+                continue
+
+        return f"⚠️ No se pudo conectar con ningún modelo. Último error: {str(last_error)}"
     except ImportError:
         return "⚠️ Instala la librería: pip install google-generativeai"
     except Exception as e:
