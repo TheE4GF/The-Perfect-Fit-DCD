@@ -298,6 +298,8 @@ def main():
     # Inicializar estado para flujo paso a paso
     if "equipo_seleccionado" not in st.session_state:
         st.session_state.equipo_seleccionado = None
+    if "mostrar_diagnostico" not in st.session_state:
+        st.session_state.mostrar_diagnostico = False
     if "mostrar_recomendaciones" not in st.session_state:
         st.session_state.mostrar_recomendaciones = False
     if "messages_gemini" not in st.session_state:
@@ -327,41 +329,56 @@ def main():
 
     # Guardar selección
     st.session_state.equipo_seleccionado = equipo_seleccionado
-    team_row = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
-    debilidad_auto, top3_debilidades = detectar_debilidades_equipo(team_row)
-    debilidad_usar = debilidad_auto
 
-    # ========== PASO 2: Gráfica de diagnóstico ==========
-    st.divider()
-    st.subheader("📊 Paso 2: Diagnóstico del equipo")
-
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        fig_radar = crear_grafico_radar(team_row, equipo_seleccionado)
-        if fig_radar:
-            st.plotly_chart(fig_radar, use_container_width=True)
-
-    with col2:
-        if 'Wins' in team_row.index:
-            st.metric("Victorias", int(team_row.get('Wins', 0)))
-            st.metric("Empates", int(team_row.get('Draws', 0)))
-            st.metric("Derrotas", int(team_row.get('Losses', 0)))
-
-        st.markdown("**Debilidades detectadas (métricas más bajas):**")
-        for i, d in enumerate(top3_debilidades, 1):
-            st.markdown(f"{i}. {d}")
-
-        st.info(f"**Refuerzo sugerido:** {debilidad_usar}")
-
-    # Botón para mostrar jugadores recomendados
-    st.divider()
-    if st.button("🎯 Ver jugadores recomendados", type="primary", use_container_width=True):
-        st.session_state.mostrar_recomendaciones = True
-        st.session_state.equipo_con_recomendaciones = equipo_seleccionado
-
-    # Resetear si cambian de equipo
+    # Resetear diagnóstico y recomendaciones si cambian de equipo
+    if "equipo_con_diagnostico" in st.session_state and st.session_state.equipo_con_diagnostico != equipo_seleccionado:
+        st.session_state.mostrar_diagnostico = False
+        st.session_state.mostrar_recomendaciones = False
     if "equipo_con_recomendaciones" in st.session_state and st.session_state.equipo_con_recomendaciones != equipo_seleccionado:
         st.session_state.mostrar_recomendaciones = False
+
+    # Botón para ver el diagnóstico (el gráfico solo aparece después de elegir equipo)
+    if st.button("📊 Ver diagnóstico del equipo", type="primary", use_container_width=True):
+        st.session_state.mostrar_diagnostico = True
+        st.session_state.equipo_con_diagnostico = equipo_seleccionado
+
+    # ========== PASO 2: Gráfica de diagnóstico (solo si ya escogió equipo y confirmó) ==========
+    if st.session_state.mostrar_diagnostico:
+        team_row = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
+        debilidad_auto, top3_debilidades = detectar_debilidades_equipo(team_row)
+        debilidad_usar = debilidad_auto
+
+        st.divider()
+        st.subheader(f"📊 Paso 2: Diagnóstico de {equipo_seleccionado}")
+
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            fig_radar = crear_grafico_radar(team_row, equipo_seleccionado)
+            if fig_radar:
+                st.plotly_chart(fig_radar, use_container_width=True)
+
+        with col2:
+            if 'Wins' in team_row.index:
+                st.metric("Victorias", int(team_row.get('Wins', 0)))
+                st.metric("Empates", int(team_row.get('Draws', 0)))
+                st.metric("Derrotas", int(team_row.get('Losses', 0)))
+
+            st.markdown("**Debilidades detectadas (métricas más bajas):**")
+            for i, d in enumerate(top3_debilidades, 1):
+                st.markdown(f"{i}. {d}")
+
+            st.info(f"**Refuerzo sugerido:** {debilidad_usar}")
+
+        # Botón para mostrar jugadores recomendados
+        st.divider()
+        if st.button("🎯 Ver jugadores recomendados", type="primary", use_container_width=True, key="btn_recomendaciones"):
+            st.session_state.mostrar_recomendaciones = True
+            st.session_state.equipo_con_recomendaciones = equipo_seleccionado
+    else:
+        # Necesitamos estos valores para cuando no hay diagnóstico (p. ej. Gemini)
+        team_row = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
+        debilidad_auto, top3_debilidades = detectar_debilidades_equipo(team_row)
+        debilidad_usar = debilidad_auto
 
     # ========== PASO 3: Jugadores recomendados (solo al apretar el botón) ==========
     if st.session_state.mostrar_recomendaciones:
