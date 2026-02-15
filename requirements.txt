@@ -2,8 +2,10 @@
 streamlit>=1.28.0
 pandas>=2.0.0
 plotly>=5.18.0
+requests>=2.28.0
 # Nuevo SDK de Google (recomendado, evita errores 404)
 google-genai>=1.0.0
 # Fallback: SDK antiguo
 google-generativeai>=0.7.2
+
 
