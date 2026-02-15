@@ -267,60 +267,75 @@ Métricas del radar: creacion_peligro, resiliencia, peligro_ofensivo, solidez_de
 Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario."""
 
     full_prompt = f"{system_instruction}\n\n{prompt}"
-    model_names = ('gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash')
 
-    # Intentar primero con el NUEVO SDK (google-genai) - recomendado por Google
+    # Opción 1: Obtener modelos disponibles vía REST y probar cada uno
+    try:
+        import requests
+        for api_version in ("v1", "v1beta"):
+            list_url = f"https://generativelanguage.googleapis.com/{api_version}/models?key={api_key}"
+            list_resp = requests.get(list_url, timeout=10)
+            if list_resp.status_code != 200:
+                continue
+            models_data = list_resp.json()
+            for m in models_data.get("models", []):
+                name = m.get("name", "").replace("models/", "")
+                methods = m.get("supportedGenerationMethods", [])
+                if "generateContent" not in methods:
+                    continue
+                gen_url = f"https://generativelanguage.googleapis.com/{api_version}/models/{name}:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": full_prompt}]}],
+                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1024}
+                }
+                try:
+                    resp = requests.post(gen_url, json=payload, timeout=30)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        if text:
+                            return text
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    # Opción 2: Lista fija de modelos por si ListModels falla
+    for api_version in ("v1", "v1beta"):
+        for model in ("gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"):
+            try:
+                import requests
+                url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model}:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": full_prompt}]}],
+                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1024}
+                }
+                resp = requests.post(url, json=payload, timeout=30)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    if text:
+                        return text
+            except Exception:
+                continue
+
+    # Opción 3: SDK google-genai (si la REST falló)
     try:
         from google import genai
         client = genai.Client(api_key=api_key)
-        last_error = None
-        for model_name in model_names:
+        for model_name in ("gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"):
             try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=full_prompt,
-                )
+                response = client.models.generate_content(model=model_name, contents=full_prompt)
                 if response and response.text:
                     return response.text
-            except Exception as e:
-                last_error = e
+            except Exception:
                 continue
-        err_msg = str(last_error) if last_error else "Error desconocido"
-        return _mensaje_error_gemini(err_msg)
     except ImportError:
-        pass  # Probar con el SDK antiguo
+        pass
 
-    # Fallback: SDK antiguo (google-generativeai)
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        last_error = None
-        for model_name in model_names:
-            try:
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content(
-                    full_prompt,
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=0.4,
-                        max_output_tokens=1024,
-                    )
-                )
-                if response and response.text:
-                    return response.text
-            except Exception as e:
-                last_error = e
-                continue
-        err_msg = str(last_error) if last_error else "Error desconocido"
-        return _mensaje_error_gemini(err_msg)
-    except ImportError:
-        return (
-            "⚠️ **Falta la librería de Gemini.**\n\n"
-            "Instala el nuevo SDK recomendado:\n"
-            "```\npip install google-genai\n```\n\n"
-            "O el antiguo: `pip install google-generativeai`"
-        )
-    except Exception as e:
-        return f"Error inesperado: {str(e)}\n\nVerifica tu conexión y la configuración de GOOGLE_API_KEY."
+    return _mensaje_error_gemini(
+        "No se encontró ningún modelo compatible. Genera una nueva API key en "
+        "Google AI Studio (aistudio.google.com) y actualízala en los secrets."
+    )
 
 
 def _mensaje_error_gemini(err_msg):
