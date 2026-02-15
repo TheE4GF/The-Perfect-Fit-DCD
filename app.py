@@ -196,7 +196,7 @@ def detectar_debilidades_equipo(team_row):
 # =============================================================================
 
 def crear_grafico_radar(team_row, team_name):
-    """Crea el gráfico de radar de rendimiento del equipo."""
+    """Crea el gráfico de radar de rendimiento del equipo con colores legibles."""
     metricas_validas = [v for v in NEW_VARIABLES if v in team_row.index]
     if not metricas_validas:
         return None
@@ -211,21 +211,39 @@ def crear_grafico_radar(team_row, team_name):
         theta=categories,
         fill='toself',
         name=team_name,
-        line=dict(color='#1f77b4', width=3),
-        marker=dict(size=8),
-        opacity=0.7
+        line=dict(color='#0d47a1', width=2.5),
+        fillcolor='rgba(25, 118, 210, 0.35)',
+        marker=dict(size=10, color='#1565c0', line=dict(color='white', width=1)),
+        opacity=0.9
     ))
     fig.update_layout(
         polar=dict(
-            radialaxis=dict(visible=True, range=[0, 1], gridcolor='lightgray'),
-            angularaxis=dict(direction='clockwise', tickfont_size=11)
+            bgcolor='#f5f5f5',
+            radialaxis=dict(
+                visible=True,
+                range=[0, 1],
+                gridcolor='#bdbdbd',
+                tickfont=dict(size=12, color='#212121'),
+                linecolor='#9e9e9e'
+            ),
+            angularaxis=dict(
+                direction='clockwise',
+                tickfont=dict(size=14, color='#1a237e', family='Arial, sans-serif'),
+                gridcolor='#9e9e9e',
+                linecolor='#616161'
+            )
         ),
         showlegend=False,
-        title=dict(text=f'Análisis de Rendimiento: {team_name}', font=dict(size=16), x=0.5),
+        title=dict(
+            text=f'Análisis de Rendimiento: {team_name}',
+            font=dict(size=18, color='#0d47a1', family='Arial'),
+            x=0.5
+        ),
         paper_bgcolor='white',
-        plot_bgcolor='white',
-        margin=dict(l=80, r=80, t=80, b=80),
-        height=450
+        plot_bgcolor='#fafafa',
+        margin=dict(l=100, r=100, t=80, b=80),
+        height=500,
+        font=dict(family='Arial', color='#212121', size=13)
     )
     return fig
 
@@ -246,7 +264,8 @@ def obtener_respuesta_gemini(prompt, historial=None):
         model_names = ('gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash')
         system_instruction = """Eres un asistente experto en análisis de fútbol y scouting de jugadores. 
 Tu rol es ayudar al usuario a entender las gráficas de diagnóstico de equipos de Liga MX y guiarlo en la elección de jugadores recomendados.
-Usa las métricas: creacion_peligro, resiliencia, peligro_ofensivo, solidez_defensiva, indice_faltas, efectivida_puerta, solidez_portero.
+La app tiene 3 pasos: 1) Seleccionar equipo, 2) Ver gráfica de diagnóstico con debilidades, 3) Al presionar el botón, ver jugadores recomendados con filtros.
+Métricas del radar: creacion_peligro, resiliencia, peligro_ofensivo, solidez_defensiva, indice_faltas, efectivida_puerta, solidez_portero.
 Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario."""
 
         last_error = None
@@ -276,6 +295,14 @@ Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario
 # =============================================================================
 
 def main():
+    # Inicializar estado para flujo paso a paso
+    if "equipo_seleccionado" not in st.session_state:
+        st.session_state.equipo_seleccionado = None
+    if "mostrar_recomendaciones" not in st.session_state:
+        st.session_state.mostrar_recomendaciones = False
+    if "messages_gemini" not in st.session_state:
+        st.session_state.messages_gemini = []
+
     st.title("⚽ The Perfect Fit")
     st.markdown("**Dashboard de Diagnóstico y Recomendación de Jugadores para Liga MX**")
 
@@ -287,60 +314,34 @@ def main():
         st.error("No se pudieron cargar los archivos CSV. Verifica que existan df_final_diagnostico_equipos.csv y df_final_recomendacion_jugadores.csv")
         return
 
-    # --- SIDEBAR ---
-    st.sidebar.header("🎯 Filtros")
-
     equipos_opciones = df_diagnostico['team_name_x'].dropna().unique().tolist()
-    equipo_seleccionado = st.sidebar.selectbox(
-        "Equipo (Liga MX)",
+
+    # ========== PASO 1: Selección de equipo ==========
+    st.subheader("📋 Paso 1: Selecciona un equipo")
+    equipo_seleccionado = st.selectbox(
+        "Equipo de Liga MX a analizar:",
         options=equipos_opciones,
-        index=0 if equipos_opciones else 0
+        index=0 if equipos_opciones else 0,
+        key="selector_equipo"
     )
 
-    st.sidebar.subheader("Presupuesto y Resultados")
-    presupuesto_mdd = st.sidebar.slider("Presupuesto máximo (M €)", min_value=0.5, max_value=50.0, value=15.0, step=0.5)
-    n_resultados = st.sidebar.slider("Número de recomendaciones", min_value=3, max_value=20, value=10)
-
-    st.sidebar.subheader("Filtros Adicionales")
-    usar_filtros = st.sidebar.checkbox("Aplicar filtros extra", value=False)
-
-    filtro_edad_min = None
-    filtro_edad_max = None
-    filtro_precio_max = None
-    filtro_contrato_min = None
-
-    if usar_filtros:
-        filtro_edad_min = st.sidebar.number_input("Edad mínima", min_value=16, max_value=45, value=18)
-        filtro_edad_max = st.sidebar.number_input("Edad máxima", min_value=16, max_value=45, value=35)
-        filtro_precio_max = st.sidebar.number_input("Precio máximo adicional (M €)", min_value=0.5, max_value=100.0, value=20.0)
-        filtro_contrato_min = st.sidebar.number_input("Mín. años de contrato restantes", min_value=0.0, max_value=5.0, value=0.0, step=0.5)
-
-    debilidad_manual = st.sidebar.selectbox(
-        "Forzar tipo de refuerzo (opcional)",
-        options=["Auto (según diagnóstico)", "Goleador", "Creador de Juego", "Defensor/Recuperador", "Regateador/Asistente", "Solidez Portero"],
-        index=0
-    )
-
-    # --- CONTENIDO PRINCIPAL ---
+    # Guardar selección
+    st.session_state.equipo_seleccionado = equipo_seleccionado
     team_row = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
     debilidad_auto, top3_debilidades = detectar_debilidades_equipo(team_row)
+    debilidad_usar = debilidad_auto
 
-    if debilidad_manual == "Auto (según diagnóstico)":
-        debilidad_usar = debilidad_auto
-    else:
-        debilidad_usar = debilidad_manual
+    # ========== PASO 2: Gráfica de diagnóstico ==========
+    st.divider()
+    st.subheader("📊 Paso 2: Diagnóstico del equipo")
 
-    # Columnas: Gráfica + Info
     col1, col2 = st.columns([1, 1])
-
     with col1:
         fig_radar = crear_grafico_radar(team_row, equipo_seleccionado)
         if fig_radar:
             st.plotly_chart(fig_radar, use_container_width=True)
 
     with col2:
-        st.subheader(f"📊 Diagnóstico: {equipo_seleccionado}")
-
         if 'Wins' in team_row.index:
             st.metric("Victorias", int(team_row.get('Wins', 0)))
             st.metric("Empates", int(team_row.get('Draws', 0)))
@@ -352,31 +353,64 @@ def main():
 
         st.info(f"**Refuerzo sugerido:** {debilidad_usar}")
 
-    # --- RECOMENDACIONES ---
+    # Botón para mostrar jugadores recomendados
     st.divider()
-    st.subheader("🎯 Jugadores Recomendados")
+    if st.button("🎯 Ver jugadores recomendados", type="primary", use_container_width=True):
+        st.session_state.mostrar_recomendaciones = True
+        st.session_state.equipo_con_recomendaciones = equipo_seleccionado
 
-    df_recomendados, error = recomendar_refuerzos_integral(
-        debilidad_usar, presupuesto_mdd, n_resultados, df_jugadores,
-        filtro_edad_min=filtro_edad_min,
-        filtro_edad_max=filtro_edad_max,
-        filtro_precio_max=filtro_precio_max,
-        filtro_contrato_min=filtro_contrato_min
-    )
+    # Resetear si cambian de equipo
+    if "equipo_con_recomendaciones" in st.session_state and st.session_state.equipo_con_recomendaciones != equipo_seleccionado:
+        st.session_state.mostrar_recomendaciones = False
 
-    if error:
-        st.warning(error)
-    elif not df_recomendados.empty:
-        st.dataframe(df_recomendados, use_container_width=True, hide_index=True)
-    else:
-        st.info("No se encontraron jugadores que cumplan los criterios.")
+    # ========== PASO 3: Jugadores recomendados (solo al apretar el botón) ==========
+    if st.session_state.mostrar_recomendaciones:
+        st.divider()
+        st.subheader("🎯 Paso 3: Jugadores recomendados")
 
-    # --- ASISTENTE GEMINI ---
+        # Filtros en sidebar (visibles solo en este paso)
+        with st.sidebar:
+            st.header("🎯 Filtros de recomendación")
+            presupuesto_mdd = st.slider("Presupuesto máximo (M €)", min_value=0.5, max_value=50.0, value=15.0, step=0.5)
+            n_resultados = st.slider("Número de recomendaciones", min_value=3, max_value=20, value=10)
+
+            debilidad_manual = st.selectbox(
+                "Forzar tipo de refuerzo (opcional)",
+                options=["Auto (según diagnóstico)", "Goleador", "Creador de Juego", "Defensor/Recuperador", "Regateador/Asistente", "Solidez Portero"],
+                index=0
+            )
+            debilidad_usar = debilidad_auto if debilidad_manual == "Auto (según diagnóstico)" else debilidad_manual
+
+            st.subheader("Filtros adicionales")
+            usar_filtros = st.checkbox("Aplicar filtros extra", value=False)
+            filtro_edad_min = None
+            filtro_edad_max = None
+            filtro_precio_max = None
+            filtro_contrato_min = None
+            if usar_filtros:
+                filtro_edad_min = st.number_input("Edad mínima", min_value=16, max_value=45, value=18)
+                filtro_edad_max = st.number_input("Edad máxima", min_value=16, max_value=45, value=35)
+                filtro_precio_max = st.number_input("Precio máximo adicional (M €)", min_value=0.5, max_value=100.0, value=20.0)
+                filtro_contrato_min = st.number_input("Mín. años de contrato restantes", min_value=0.0, max_value=5.0, value=0.0, step=0.5)
+
+        df_recomendados, error = recomendar_refuerzos_integral(
+            debilidad_usar, presupuesto_mdd, n_resultados, df_jugadores,
+            filtro_edad_min=filtro_edad_min,
+            filtro_edad_max=filtro_edad_max,
+            filtro_precio_max=filtro_precio_max,
+            filtro_contrato_min=filtro_contrato_min
+        )
+
+        if error:
+            st.warning(error)
+        elif not df_recomendados.empty:
+            st.dataframe(df_recomendados, use_container_width=True, hide_index=True)
+        else:
+            st.info("No se encontraron jugadores que cumplan los criterios.")
+
+    # ========== ASISTENTE GEMINI (siempre visible) ==========
     st.divider()
     st.subheader("🤖 Asistente IA (Gemini)")
-
-    if "messages_gemini" not in st.session_state:
-        st.session_state.messages_gemini = []
 
     for msg in st.session_state.messages_gemini:
         with st.chat_message(msg["role"]):
@@ -392,7 +426,7 @@ def main():
 Equipo analizado: {equipo_seleccionado}
 Debilidades detectadas: {', '.join(top3_debilidades)}
 Tipo de refuerzo aplicado: {debilidad_usar}
-Número de jugadores recomendados mostrados: {len(df_recomendados) if not df_recomendados.empty else 0}
+¿El usuario ya vio las recomendaciones de jugadores? {st.session_state.mostrar_recomendaciones}
 """
         respuesta = obtener_respuesta_gemini(contexto + "\n\nPregunta del usuario: " + prompt)
 
