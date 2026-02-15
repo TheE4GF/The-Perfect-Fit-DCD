@@ -98,7 +98,8 @@ def cargar_recomendacion_jugadores():
 
 def recomendar_refuerzos_integral(debilidad_prioritaria, presupuesto_max, n_opciones, df_players, 
                                    filtro_edad_min=None, filtro_edad_max=None, 
-                                   filtro_precio_max=None, filtro_contrato_min=None):
+                                   filtro_precio_max=None, filtro_contrato_min=None,
+                                   filtro_nacionalidad=None):
     """
     Recomienda jugadores basado en debilidad prioritaria.
     Fidelidad a la función en pruebaproyectofinalmodulov_final.py
@@ -135,6 +136,8 @@ def recomendar_refuerzos_integral(debilidad_prioritaria, presupuesto_max, n_opci
     if filtro_contrato_min is not None and 'contract_length_years' in candidatos.columns:
         candidatos['contract_length_years'] = pd.to_numeric(candidatos['contract_length_years'], errors='coerce')
         candidatos = candidatos[candidatos['contract_length_years'].fillna(0) >= filtro_contrato_min]
+    if filtro_nacionalidad is not None and len(filtro_nacionalidad) > 0 and 'player_nationality' in candidatos.columns:
+        candidatos = candidatos[candidatos['player_nationality'].fillna('').astype(str).str.strip().isin([str(n).strip() for n in filtro_nacionalidad])]
 
     if candidatos.empty:
         return pd.DataFrame(), "No hay jugadores que cumplan los filtros aplicados."
@@ -148,9 +151,9 @@ def recomendar_refuerzos_integral(debilidad_prioritaria, presupuesto_max, n_opci
     top_opciones = candidatos_ordenados.head(n_opciones)
 
     result_columns = [
-        'player_name', 'team_name', 'league_name', 'player_age',
+        'player_name', 'team_name', 'league_name', 'player_age', 'player_nationality',
         'transfermarkt_market_value', 'games_position', sort_metric,
-        'cluster', 'contract_length_years', 'transfermarkt_contract_ends'
+        'contract_length_years', 'transfermarkt_contract_ends'
     ]
     result_columns = [c for c in result_columns if c in top_opciones.columns]
     final_df = top_opciones[result_columns].copy()
@@ -159,10 +162,10 @@ def recomendar_refuerzos_integral(debilidad_prioritaria, presupuesto_max, n_opci
         'team_name': 'Equipo',
         'league_name': 'Liga',
         'player_age': 'Edad',
+        'player_nationality': 'Nacionalidad',
         'transfermarkt_market_value': 'Valor (M €)',
         'games_position': 'Posición',
         sort_metric: f'Métrica Clave (p90)',
-        'cluster': 'Clúster',
         'contract_length_years': 'Años Contrato',
         'transfermarkt_contract_ends': 'Fin Contrato'
     })
@@ -404,18 +407,22 @@ def main():
             filtro_edad_max = None
             filtro_precio_max = None
             filtro_contrato_min = None
+            filtro_nacionalidad = None
             if usar_filtros:
                 filtro_edad_min = st.number_input("Edad mínima", min_value=16, max_value=45, value=18)
                 filtro_edad_max = st.number_input("Edad máxima", min_value=16, max_value=45, value=35)
                 filtro_precio_max = st.number_input("Precio máximo adicional (M €)", min_value=0.5, max_value=100.0, value=20.0)
                 filtro_contrato_min = st.number_input("Mín. años de contrato restantes", min_value=0.0, max_value=5.0, value=0.0, step=0.5)
+                nacionalidades_disponibles = sorted(df_jugadores['player_nationality'].dropna().astype(str).unique().tolist())
+                filtro_nacionalidad = st.multiselect("Nacionalidad del jugador", options=nacionalidades_disponibles, default=None, help="Deja vacío para incluir todas")
 
         df_recomendados, error = recomendar_refuerzos_integral(
             debilidad_usar, presupuesto_mdd, n_resultados, df_jugadores,
             filtro_edad_min=filtro_edad_min,
             filtro_edad_max=filtro_edad_max,
             filtro_precio_max=filtro_precio_max,
-            filtro_contrato_min=filtro_contrato_min
+            filtro_contrato_min=filtro_contrato_min,
+            filtro_nacionalidad=filtro_nacionalidad
         )
 
         if error:
