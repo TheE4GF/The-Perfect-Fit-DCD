@@ -256,43 +256,50 @@ def crear_grafico_radar(team_row, team_name):
 
 def obtener_respuesta_gemini(prompt, historial=None):
     """Usa Gemini para responder preguntas del usuario sobre gráficas y recomendaciones."""
-    try:
-        import google.generativeai as genai
-        api_key = st.secrets.get("GOOGLE_API_KEY", "")
-        if not api_key:
-            return "⚠️ No se encontró GOOGLE_API_KEY en st.secrets. Configura la clave en Streamlit Cloud o en .streamlit/secrets.toml localmente."
+    api_key = st.secrets.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        return "⚠️ No se encontró GOOGLE_API_KEY en st.secrets. Configura la clave en Streamlit Cloud o en .streamlit/secrets.toml localmente."
 
-        genai.configure(api_key=api_key)
-        # Lista ampliada: modelos más recientes primero (las cuentas varían según región y antigüedad)
-        model_names = (
-            'gemini-2.5-flash',
-            'gemini-2.5-flash-preview-05-20',
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-001',
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-pro',
-        )
-        system_instruction = """Eres un asistente experto en análisis de fútbol y scouting de jugadores. 
+    system_instruction = """Eres un asistente experto en análisis de fútbol y scouting de jugadores. 
 Tu rol es ayudar al usuario a entender las gráficas de diagnóstico de equipos de Liga MX y guiarlo en la elección de jugadores recomendados.
 La app tiene 3 pasos: 1) Seleccionar equipo, 2) Ver gráfica de diagnóstico con debilidades, 3) Al presionar el botón, ver jugadores recomendados con filtros.
-
-REGLAS DE ORO:
-1.- FLUJO OBLIGATORIO: Si el usuario no ha presionado el botón de 'BUSCAR REFUERZOS', debes responder amablemente que primero seleccionen un equipo y presionen el botón para que puedas analizar a los candidatos reales.
-2.- Solo recomienda o habla a fondo de los jugadores que aparecen en esta lista: {datos_jugadores[:2000]}
-3.- MÉTRICAS: Usa términos como 'Percentiles', 'Clustering K-Means' y 'Métricas p90' para dar autoridad.
-4.- SI NO HAY DATOS: Si la lista de jugadores está vacía, no inventes nombres. Pide que ejecuten la búsqueda.
-
 Métricas del radar: creacion_peligro, resiliencia, peligro_ofensivo, solidez_defensiva, indice_faltas, efectivida_puerta, solidez_portero.
 Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario."""
 
+    full_prompt = f"{system_instruction}\n\n{prompt}"
+    model_names = ('gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash')
+
+    # Intentar primero con el NUEVO SDK (google-genai) - recomendado por Google
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        last_error = None
+        for model_name in model_names:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=full_prompt,
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                last_error = e
+                continue
+        err_msg = str(last_error) if last_error else "Error desconocido"
+        return _mensaje_error_gemini(err_msg)
+    except ImportError:
+        pass  # Probar con el SDK antiguo
+
+    # Fallback: SDK antiguo (google-generativeai)
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
         last_error = None
         for model_name in model_names:
             try:
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content(
-                    f"{system_instruction}\n\n{prompt}",
+                    full_prompt,
                     generation_config=genai.types.GenerationConfig(
                         temperature=0.4,
                         max_output_tokens=1024,
@@ -303,22 +310,30 @@ Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario
             except Exception as e:
                 last_error = e
                 continue
-
-        # Mensaje amigable con sugerencias
         err_msg = str(last_error) if last_error else "Error desconocido"
-        return (
-            "⚠️ **No se pudo conectar con Gemini.**\n\n"
-            f"*Error técnico:* {err_msg}\n\n"
-            "**Qué puedes hacer:**\n"
-            "1. Verifica tu API key en [Google AI Studio](https://aistudio.google.com/).\n"
-            "2. Confirma que la clave tenga acceso a modelos Gemini.\n"
-            "3. Prueba generar una nueva API key si la actual es antigua.\n\n"
-            "Mientras tanto, puedes usar los filtros de la app para encontrar jugadores por debilidad, edad, precio y nacionalidad."
-        )
+        return _mensaje_error_gemini(err_msg)
     except ImportError:
-        return "⚠️ Instala la librería: `pip install google-generativeai`"
+        return (
+            "⚠️ **Falta la librería de Gemini.**\n\n"
+            "Instala el nuevo SDK recomendado:\n"
+            "```\npip install google-genai\n```\n\n"
+            "O el antiguo: `pip install google-generativeai`"
+        )
     except Exception as e:
         return f"Error inesperado: {str(e)}\n\nVerifica tu conexión y la configuración de GOOGLE_API_KEY."
+
+
+def _mensaje_error_gemini(err_msg):
+    """Mensaje amigable cuando falla la conexión a Gemini."""
+    return (
+        "⚠️ **No se pudo conectar con Gemini.**\n\n"
+        f"*Error técnico:* {err_msg}\n\n"
+        "**Qué puedes hacer:**\n"
+        "1. Instala el nuevo SDK: `pip install google-genai`\n"
+        "2. Verifica tu API key en [Google AI Studio](https://aistudio.google.com/).\n"
+        "3. Genera una nueva API key si la actual es antigua.\n\n"
+        "Mientras tanto, usa los filtros de la app para encontrar jugadores."
+    )
 
 # =============================================================================
 # INTERFAZ PRINCIPAL
