@@ -263,8 +263,17 @@ def obtener_respuesta_gemini(prompt, historial=None):
             return "⚠️ No se encontró GOOGLE_API_KEY en st.secrets. Configura la clave en Streamlit Cloud o en .streamlit/secrets.toml localmente."
 
         genai.configure(api_key=api_key)
-        # Probar modelos en orden (cuentas nuevas suelen tener gemini-2.x)
-        model_names = ('gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash')
+        # Lista ampliada: modelos más recientes primero (las cuentas varían según región y antigüedad)
+        model_names = (
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-preview-05-20',
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-001',
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-pro',
+        )
         system_instruction = """Eres un asistente experto en análisis de fútbol y scouting de jugadores. 
 Tu rol es ayudar al usuario a entender las gráficas de diagnóstico de equipos de Liga MX y guiarlo en la elección de jugadores recomendados.
 La app tiene 3 pasos: 1) Seleccionar equipo, 2) Ver gráfica de diagnóstico con debilidades, 3) Al presionar el botón, ver jugadores recomendados con filtros.
@@ -289,16 +298,27 @@ Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario
                         max_output_tokens=1024,
                     )
                 )
-                return response.text
+                if response and response.text:
+                    return response.text
             except Exception as e:
                 last_error = e
                 continue
 
-        return f"⚠️ No se pudo conectar con ningún modelo. Último error: {str(last_error)}"
+        # Mensaje amigable con sugerencias
+        err_msg = str(last_error) if last_error else "Error desconocido"
+        return (
+            "⚠️ **No se pudo conectar con Gemini.**\n\n"
+            f"*Error técnico:* {err_msg}\n\n"
+            "**Qué puedes hacer:**\n"
+            "1. Verifica tu API key en [Google AI Studio](https://aistudio.google.com/).\n"
+            "2. Confirma que la clave tenga acceso a modelos Gemini.\n"
+            "3. Prueba generar una nueva API key si la actual es antigua.\n\n"
+            "Mientras tanto, puedes usar los filtros de la app para encontrar jugadores por debilidad, edad, precio y nacionalidad."
+        )
     except ImportError:
-        return "⚠️ Instala la librería: pip install google-generativeai"
+        return "⚠️ Instala la librería: `pip install google-generativeai`"
     except Exception as e:
-        return f"Error al conectar con Gemini: {str(e)}"
+        return f"Error inesperado: {str(e)}\n\nVerifica tu conexión y la configuración de GOOGLE_API_KEY."
 
 # =============================================================================
 # INTERFAZ PRINCIPAL
