@@ -7,6 +7,7 @@ Dashboard Streamlit con diagnóstico de equipos y recomendaciones basadas en cl�
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import os
 
 # Configuración de página
@@ -198,6 +199,82 @@ def detectar_debilidades_equipo(team_row):
 # GRÁFICA DE RADAR
 # =============================================================================
 
+def crear_grafico_desempeno_equipo(team_row, team_name):
+    """Crea el gráfico de desempeño: Wins/Draws/Losses y Goles a favor vs en contra (por equipo)."""
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=('Resultados (Victorias, Empates, Derrotas)', 'Goles a favor vs en contra')
+    )
+    match_outcomes = ['Victorias', 'Empates', 'Derrotas']
+    match_values = [
+        int(team_row.get('Wins', 0)),
+        int(team_row.get('Draws', 0)),
+        int(team_row.get('Losses', 0))
+    ]
+    fig.add_trace(
+        go.Bar(x=match_outcomes, y=match_values, marker_color=['#2e7d32', '#ef6c00', '#c62828'], showlegend=False),
+        row=1, col=1
+    )
+    goals_labels = ['Goles a favor', 'Goles en contra']
+    goals_values = [
+        team_row.get('statistics_goals_for_total_total', 0),
+        team_row.get('statistics_goals_against_total_total', 0)
+    ]
+    fig.add_trace(
+        go.Bar(x=goals_labels, y=goals_values, marker_color=['#1565c0', '#b71c1c'], showlegend=False),
+        row=1, col=2
+    )
+    fig.update_layout(
+        title_text=f'Desempeño de {team_name} en la temporada',
+        title_x=0.5,
+        height=400,
+        barmode='group',
+        paper_bgcolor='white',
+        font=dict(family='Arial', color='#212121')
+    )
+    return fig
+
+
+def crear_grafico_goles_por_minuto(team_row, team_name):
+    """Crea el gráfico de goles anotados y recibidos por rango de minutos (por equipo)."""
+    minute_ranges_labels = ['0-15', '16-30', '31-45', '46-60', '61-75', '76-90']
+    goals_for_values = []
+    for mr in minute_ranges_labels:
+        col_name = f'statistics_goals_for_minute_{mr}_total'
+        val = team_row.get(col_name, 0)
+        goals_for_values.append(0 if pd.isna(val) else float(val))
+    goals_against_values = []
+    for mr in minute_ranges_labels:
+        col_name = f'statistics_goals_against_minute_{mr}_total'
+        val = team_row.get(col_name, 0)
+        goals_against_values.append(0 if pd.isna(val) else float(val))
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=(f'Goles anotados por minuto', f'Goles recibidos por minuto')
+    )
+    fig.add_trace(
+        go.Bar(x=minute_ranges_labels, y=goals_for_values, name='Goles anotados', marker_color='#2e7d32'),
+        row=1, col=1
+    )
+    fig.add_trace(
+        go.Bar(x=minute_ranges_labels, y=goals_against_values, name='Goles recibidos', marker_color='#c62828'),
+        row=1, col=2
+    )
+    fig.update_layout(
+        title_text=f'Goles por minuto - {team_name}',
+        title_x=0.5,
+        height=400,
+        showlegend=False,
+        paper_bgcolor='white',
+        font=dict(family='Arial', color='#212121')
+    )
+    fig.update_xaxes(title_text='Rango de minutos', row=1, col=1)
+    fig.update_yaxes(title_text='Total goles', row=1, col=1)
+    fig.update_xaxes(title_text='Rango de minutos', row=1, col=2)
+    fig.update_yaxes(title_text='Total goles', row=1, col=2)
+    return fig
+
+
 def crear_grafico_radar(team_row, team_name):
     """Crea el gráfico de radar de rendimiento del equipo con colores legibles."""
     metricas_validas = [v for v in NEW_VARIABLES if v in team_row.index]
@@ -262,7 +339,7 @@ def obtener_respuesta_gemini(prompt, historial=None):
 
     system_instruction = """Eres un asistente experto en análisis de fútbol y scouting de jugadores. 
 Tu rol es ayudar al usuario a entender las gráficas de diagnóstico de equipos de Liga MX y guiarlo en la elección de jugadores recomendados.
-La app tiene 3 pasos: 1) Seleccionar equipo, 2) Ver gráfica de diagnóstico con debilidades, 3) Al presionar el botón, ver jugadores recomendados con filtros.
+La app tiene 4 pasos: 1) Seleccionar equipo, 2) Ver gráficas generales 3)Ver gráficas de diagnóstico con debilidades, 4) Al presionar el botón, ver jugadores recomendados con filtros.
 
 REGLAS DE ORO:
 1.- FLUJO OBLIGATORIO: Si el usuario no ha presionado el botón de 'BUSCAR REFUERZOS', debes responder amablemente que primero seleccionen un equipo y presionen el botón para que puedas analizar a los candidatos reales.
@@ -403,6 +480,42 @@ def main():
         st.session_state.mostrar_recomendaciones = False
     if "equipo_con_recomendaciones" in st.session_state and st.session_state.equipo_con_recomendaciones != equipo_seleccionado:
         st.session_state.mostrar_recomendaciones = False
+
+    # ========== SECCIÓN NUEVA: Estadísticas por equipo (entre selección y diagnóstico) ==========
+    st.divider()
+    st.subheader("📈 Estadísticas por equipo")
+    st.caption("Gráficas de desempeño y tabla de posesión y rating. Luego usa el botón inferior para ver el diagnóstico detallado.")
+
+    team_row_preview = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
+
+    col_chart1, col_chart2 = st.columns(2)
+    with col_chart1:
+        fig_desempeno = crear_grafico_desempeno_equipo(team_row_preview, equipo_seleccionado)
+        st.plotly_chart(fig_desempeno, use_container_width=True)
+    with col_chart2:
+        fig_minutos = crear_grafico_goles_por_minuto(team_row_preview, equipo_seleccionado)
+        st.plotly_chart(fig_minutos, use_container_width=True)
+
+    # Tabla: ball_possession_total y games_rating por equipo (todos los equipos)
+    st.markdown("**Posesión y rating por equipo (Liga MX)**")
+    cols_tabla = ['team_name_x', 'ball_possession_total', 'games_rating']
+    cols_disponibles = [c for c in cols_tabla if c in df_diagnostico.columns]
+    if cols_disponibles:
+        df_tabla = df_diagnostico[cols_disponibles].copy()
+        if 'ball_possession_total' in df_tabla.columns:
+            df_tabla['ball_possession_total'] = pd.to_numeric(df_tabla['ball_possession_total'], errors='coerce')
+        if 'games_rating' in df_tabla.columns:
+            df_tabla['games_rating'] = pd.to_numeric(df_tabla['games_rating'], errors='coerce')
+        rename_map = {'team_name_x': 'Equipo', 'ball_possession_total': 'Posesión (%)', 'games_rating': 'Rating'}
+        df_tabla = df_tabla.rename(columns={k: v for k, v in rename_map.items() if k in df_tabla.columns})
+        # Mostrar posesión como porcentaje 0-100 si los valores están en 0-1
+        if 'Posesión (%)' in df_tabla.columns and df_tabla['Posesión (%)'].max() <= 1.5:
+            df_tabla['Posesión (%)'] = (df_tabla['Posesión (%)'] * 100).round(1)
+        st.dataframe(df_tabla, use_container_width=True, hide_index=True)
+    else:
+        st.info("No se encontraron las columnas ball_possession_total o games_rating en los datos.")
+
+    st.divider()
 
     # Botón para ver el diagnóstico (el gráfico solo aparece después de elegir equipo)
     if st.button("📊 Ver diagnóstico del equipo", type="primary", use_container_width=True):
