@@ -179,7 +179,7 @@ def recomendar_refuerzos_integral(debilidad_prioritaria, presupuesto_max, n_opci
 def detectar_debilidades_equipo(team_row):
     """
     Identifica la debilidad principal del equipo (métrica normalizada más baja del radar).
-    Basado en la gráfica de radar del código original.
+    Retorna: (refuerzo_prioritario, lista de 3 claves de métrica ordenadas de más débil a menos).
     """
     metricas_validas = [v for v in NEW_VARIABLES if v in team_row.index]
     if not metricas_validas:
@@ -190,10 +190,19 @@ def detectar_debilidades_equipo(team_row):
     idx_min = valores.idxmin()
     debilidad_prioritaria = METRICA_A_DEBILIDAD.get(idx_min, 'Defensor/Recuperador')
 
-    # Top 3 debilidades (métricas más bajas)
-    orden_debilidades = valores.sort_values().index.tolist()
-    top3 = [METRICA_A_DEBILIDAD.get(m, m) for m in orden_debilidades[:3]]
-    return debilidad_prioritaria, top3
+    # Top 3 debilidades: claves de métrica (para mostrar nombre en gráfica + tipo de jugador)
+    orden_metricas = valores.sort_values().index.tolist()
+    top3_metricas = orden_metricas[:3]
+    return debilidad_prioritaria, top3_metricas
+
+# Estilo unificado de gráficas (acorde al diseño de la página Streamlit)
+_CHART_THEME = {
+    'paper_bgcolor': '#f0f2f6',
+    'plot_bgcolor': '#f0f2f6',
+    'font_color': '#1f1f1f',
+    'gridcolor': '#e0e0e0',
+    'linecolor': '#d0d0d0',
+}
 
 # =============================================================================
 # GRÁFICA DE RADAR
@@ -229,9 +238,11 @@ def crear_grafico_desempeno_equipo(team_row, team_name):
         title_x=0.5,
         height=400,
         barmode='group',
-        paper_bgcolor='white',
-        font=dict(family='Arial', color='#212121')
+        paper_bgcolor=_CHART_THEME['paper_bgcolor'],
+        font=dict(family='Arial', color=_CHART_THEME['font_color'])
     )
+    fig.update_xaxes(gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'])
+    fig.update_yaxes(gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'])
     return fig
 
 
@@ -265,13 +276,13 @@ def crear_grafico_goles_por_minuto(team_row, team_name):
         title_x=0.5,
         height=400,
         showlegend=False,
-        paper_bgcolor='white',
-        font=dict(family='Arial', color='#212121')
+        paper_bgcolor=_CHART_THEME['paper_bgcolor'],
+        font=dict(family='Arial', color=_CHART_THEME['font_color'])
     )
-    fig.update_xaxes(title_text='Rango de minutos', row=1, col=1)
-    fig.update_yaxes(title_text='Total goles', row=1, col=1)
-    fig.update_xaxes(title_text='Rango de minutos', row=1, col=2)
-    fig.update_yaxes(title_text='Total goles', row=1, col=2)
+    fig.update_xaxes(title_text='Rango de minutos', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], row=1, col=1)
+    fig.update_yaxes(title_text='Total goles', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], row=1, col=1)
+    fig.update_xaxes(title_text='Rango de minutos', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], row=1, col=2)
+    fig.update_yaxes(title_text='Total goles', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], row=1, col=2)
     return fig
 
 
@@ -298,19 +309,19 @@ def crear_grafico_radar(team_row, team_name):
     ))
     fig.update_layout(
         polar=dict(
-            bgcolor='#f5f5f5',
+            bgcolor=_CHART_THEME['plot_bgcolor'],
             radialaxis=dict(
                 visible=True,
                 range=[0, 1],
-                gridcolor='#bdbdbd',
-                tickfont=dict(size=12, color='#212121'),
-                linecolor='#9e9e9e'
+                gridcolor=_CHART_THEME['gridcolor'],
+                tickfont=dict(size=12, color=_CHART_THEME['font_color']),
+                linecolor=_CHART_THEME['linecolor']
             ),
             angularaxis=dict(
                 direction='clockwise',
-                tickfont=dict(size=14, color='#1a237e', family='Arial, sans-serif'),
-                gridcolor='#9e9e9e',
-                linecolor='#616161'
+                tickfont=dict(size=14, color=_CHART_THEME['font_color'], family='Arial, sans-serif'),
+                gridcolor=_CHART_THEME['gridcolor'],
+                linecolor=_CHART_THEME['linecolor']
             )
         ),
         showlegend=False,
@@ -319,11 +330,11 @@ def crear_grafico_radar(team_row, team_name):
             font=dict(size=18, color='#0d47a1', family='Arial'),
             x=0.5
         ),
-        paper_bgcolor='white',
-        plot_bgcolor='#fafafa',
+        paper_bgcolor=_CHART_THEME['paper_bgcolor'],
+        plot_bgcolor=_CHART_THEME['plot_bgcolor'],
         margin=dict(l=100, r=100, t=80, b=80),
         height=500,
-        font=dict(family='Arial', color='#212121', size=13)
+        font=dict(family='Arial', color=_CHART_THEME['font_color'], size=13)
     )
     return fig
 
@@ -339,7 +350,7 @@ def obtener_respuesta_gemini(prompt, historial=None):
 
     system_instruction = """Eres un asistente experto en análisis de fútbol y scouting de jugadores. 
 Tu rol es ayudar al usuario a entender las gráficas de diagnóstico de equipos de Liga MX y guiarlo en la elección de jugadores recomendados.
-La app tiene 3 pasos: 1) Seleccionar equipo, 2) Ver gráficas generales 3)Ver gráficas de diagnóstico con debilidades, 4) Al presionar el botón, ver jugadores recomendados con filtros.
+La app tiene 3 pasos: 1) Seleccionar equipo, 2) Ver gráfica de diagnóstico con debilidades, 3) Al presionar el botón, ver jugadores recomendados con filtros.
 
 REGLAS DE ORO:
 1.- FLUJO OBLIGATORIO: Si el usuario no ha presionado el botón de 'BUSCAR REFUERZOS', debes responder amablemente que primero seleccionen un equipo y presionen el botón para que puedas analizar a los candidatos reales.
@@ -535,8 +546,9 @@ def main():
     # ========== PASO 2: Gráfica de diagnóstico (solo si ya escogió equipo y confirmó) ==========
     if st.session_state.mostrar_diagnostico:
         team_row = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
-        debilidad_auto, top3_debilidades = detectar_debilidades_equipo(team_row)
+        debilidad_auto, top3_metricas = detectar_debilidades_equipo(team_row)
         debilidad_usar = debilidad_auto
+        top3_refuerzos = [METRICA_A_DEBILIDAD.get(m, m) for m in top3_metricas] if top3_metricas else []
 
         st.divider()
         st.subheader(f"📊 Paso 2: Diagnóstico de {equipo_seleccionado}")
@@ -549,8 +561,11 @@ def main():
 
         with col2:
             st.markdown("**Debilidades detectadas (métricas más bajas):**")
-            for i, d in enumerate(top3_debilidades, 1):
-                st.markdown(f"{i}. {d}")
+            for i, metrica_key in enumerate(top3_metricas, 1):
+                nombre_metrica = METRICAS_LABELS.get(metrica_key, metrica_key)
+                tipo_jugador = METRICA_A_DEBILIDAD.get(metrica_key, metrica_key)
+                st.markdown(f"{i}. **{nombre_metrica}**")
+                st.caption(f"→ Tipo de jugador que se necesita: {tipo_jugador}")
 
             st.info(f"**Refuerzo sugerido:** {debilidad_usar}")
 
@@ -562,8 +577,9 @@ def main():
     else:
         # Necesitamos estos valores para cuando no hay diagnóstico (p. ej. Gemini)
         team_row = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
-        debilidad_auto, top3_debilidades = detectar_debilidades_equipo(team_row)
+        debilidad_auto, top3_metricas = detectar_debilidades_equipo(team_row)
         debilidad_usar = debilidad_auto
+        top3_refuerzos = [METRICA_A_DEBILIDAD.get(m, m) for m in top3_metricas] if top3_metricas else []
 
     # ========== PASO 3: Jugadores recomendados (solo al apretar el botón) ==========
     if st.session_state.mostrar_recomendaciones:
@@ -630,7 +646,7 @@ def main():
 
         contexto = f"""
 Equipo analizado: {equipo_seleccionado}
-Debilidades detectadas: {', '.join(top3_debilidades)}
+Debilidades detectadas: {', '.join(top3_refuerzos)}
 Tipo de refuerzo aplicado: {debilidad_usar}
 ¿El usuario ya vio las recomendaciones de jugadores? {st.session_state.mostrar_recomendaciones}
 """
