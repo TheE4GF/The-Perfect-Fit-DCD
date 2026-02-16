@@ -18,6 +18,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# CSS: contenedor de gráficas sin fondo blanco y con bordes redondeados
+st.markdown("""
+<style>
+    div[data-testid="stPlotlyChart"] {
+        background-color: #0e1117 !important;
+        border-radius: 10px;
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    div[data-testid="stPlotlyChart"] > div {
+        background-color: transparent !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # =============================================================================
 # CONSTANTES (fidelidad al código original)
 # =============================================================================
@@ -195,13 +210,14 @@ def detectar_debilidades_equipo(team_row):
     top3_metricas = orden_metricas[:3]
     return debilidad_prioritaria, top3_metricas
 
-# Estilo unificado de gráficas (acorde al diseño de la página Streamlit)
+# Tema oscuro para gráficas (sin fondo blanco; integrado con la página)
 _CHART_THEME = {
-    'paper_bgcolor': '#f0f2f6',
-    'plot_bgcolor': '#f0f2f6',
-    'font_color': '#1f1f1f',
-    'gridcolor': '#e0e0e0',
-    'linecolor': '#d0d0d0',
+    'paper_bgcolor': '#0e1117',
+    'plot_bgcolor': '#1a1d24',
+    'font_color': '#e8eaed',
+    'gridcolor': '#3c4043',
+    'linecolor': '#5f6368',
+    'title_font_size': 15,
 }
 
 # =============================================================================
@@ -212,7 +228,9 @@ def crear_grafico_desempeno_equipo(team_row, team_name):
     """Crea el gráfico de desempeño: Wins/Draws/Losses y Goles a favor vs en contra (por equipo)."""
     fig = make_subplots(
         rows=1, cols=2,
-        subplot_titles=('Resultados (Victorias, Empates, Derrotas)', 'Goles a favor vs en contra')
+        subplot_titles=('Resultados (Victorias, Empates, Derrotas)', 'Goles a favor vs en contra'),
+        horizontal_spacing=0.12,
+        vertical_spacing=0.08
     )
     match_outcomes = ['Victorias', 'Empates', 'Derrotas']
     match_values = [
@@ -221,7 +239,7 @@ def crear_grafico_desempeno_equipo(team_row, team_name):
         int(team_row.get('Losses', 0))
     ]
     fig.add_trace(
-        go.Bar(x=match_outcomes, y=match_values, marker_color=['#2e7d32', '#ef6c00', '#c62828'], showlegend=False),
+        go.Bar(x=match_outcomes, y=match_values, marker_color=['#4caf50', '#ff9800', '#f44336'], showlegend=False),
         row=1, col=1
     )
     goals_labels = ['Goles a favor', 'Goles en contra']
@@ -230,19 +248,23 @@ def crear_grafico_desempeno_equipo(team_row, team_name):
         team_row.get('statistics_goals_against_total_total', 0)
     ]
     fig.add_trace(
-        go.Bar(x=goals_labels, y=goals_values, marker_color=['#1565c0', '#b71c1c'], showlegend=False),
+        go.Bar(x=goals_labels, y=goals_values, marker_color=['#42a5f5', '#e57373'], showlegend=False),
         row=1, col=2
     )
     fig.update_layout(
         title_text=f'Desempeño de {team_name} en la temporada',
+        title_font=dict(size=_CHART_THEME['title_font_size'], color=_CHART_THEME['font_color']),
         title_x=0.5,
-        height=400,
+        height=380,
         barmode='group',
         paper_bgcolor=_CHART_THEME['paper_bgcolor'],
-        font=dict(family='Arial', color=_CHART_THEME['font_color'])
+        plot_bgcolor=_CHART_THEME['plot_bgcolor'],
+        font=dict(family='Arial', color=_CHART_THEME['font_color'], size=12),
+        margin=dict(t=60, b=50, l=50, r=30)
     )
-    fig.update_xaxes(gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'])
-    fig.update_yaxes(gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'])
+    fig.update_xaxes(gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], zerolinecolor=_CHART_THEME['linecolor'])
+    fig.update_yaxes(gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], zerolinecolor=_CHART_THEME['linecolor'])
+    fig.update_annotations(font=dict(size=13, color=_CHART_THEME['font_color']))
     return fig
 
 
@@ -261,28 +283,34 @@ def crear_grafico_goles_por_minuto(team_row, team_name):
         goals_against_values.append(0 if pd.isna(val) else float(val))
     fig = make_subplots(
         rows=1, cols=2,
-        subplot_titles=(f'Goles anotados por minuto', f'Goles recibidos por minuto')
+        subplot_titles=('Goles anotados por minuto', 'Goles recibidos por minuto'),
+        horizontal_spacing=0.12,
+        vertical_spacing=0.08
     )
     fig.add_trace(
-        go.Bar(x=minute_ranges_labels, y=goals_for_values, name='Goles anotados', marker_color='#2e7d32'),
+        go.Bar(x=minute_ranges_labels, y=goals_for_values, name='Goles anotados', marker_color='#4caf50'),
         row=1, col=1
     )
     fig.add_trace(
-        go.Bar(x=minute_ranges_labels, y=goals_against_values, name='Goles recibidos', marker_color='#c62828'),
+        go.Bar(x=minute_ranges_labels, y=goals_against_values, name='Goles recibidos', marker_color='#e57373'),
         row=1, col=2
     )
     fig.update_layout(
-        title_text=f'Goles por minuto - {team_name}',
+        title_text=f'Goles por minuto — {team_name}',
+        title_font=dict(size=_CHART_THEME['title_font_size'], color=_CHART_THEME['font_color']),
         title_x=0.5,
-        height=400,
+        height=380,
         showlegend=False,
         paper_bgcolor=_CHART_THEME['paper_bgcolor'],
-        font=dict(family='Arial', color=_CHART_THEME['font_color'])
+        plot_bgcolor=_CHART_THEME['plot_bgcolor'],
+        font=dict(family='Arial', color=_CHART_THEME['font_color'], size=12),
+        margin=dict(t=60, b=50, l=50, r=30)
     )
-    fig.update_xaxes(title_text='Rango de minutos', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], row=1, col=1)
-    fig.update_yaxes(title_text='Total goles', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], row=1, col=1)
-    fig.update_xaxes(title_text='Rango de minutos', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], row=1, col=2)
-    fig.update_yaxes(title_text='Total goles', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], row=1, col=2)
+    fig.update_xaxes(title_text='Rango de minutos', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], zerolinecolor=_CHART_THEME['linecolor'], row=1, col=1)
+    fig.update_yaxes(title_text='Total goles', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], zerolinecolor=_CHART_THEME['linecolor'], row=1, col=1)
+    fig.update_xaxes(title_text='Rango de minutos', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], zerolinecolor=_CHART_THEME['linecolor'], row=1, col=2)
+    fig.update_yaxes(title_text='Total goles', gridcolor=_CHART_THEME['gridcolor'], linecolor=_CHART_THEME['linecolor'], zerolinecolor=_CHART_THEME['linecolor'], row=1, col=2)
+    fig.update_annotations(font=dict(size=13, color=_CHART_THEME['font_color']))
     return fig
 
 
@@ -327,7 +355,7 @@ def crear_grafico_radar(team_row, team_name):
         showlegend=False,
         title=dict(
             text=f'Análisis de Rendimiento: {team_name}',
-            font=dict(size=18, color='#0d47a1', family='Arial'),
+            font=dict(size=18, color=_CHART_THEME['font_color'], family='Arial'),
             x=0.5
         ),
         paper_bgcolor=_CHART_THEME['paper_bgcolor'],
@@ -359,6 +387,16 @@ REGLAS DE ORO:
 4.- SI NO HAY DATOS: Si la lista de jugadores está vacía, no inventes nombres. Pide que ejecuten la búsqueda.
 
 Métricas del radar: creacion_peligro, resiliencia, peligro_ofensivo, solidez_defensiva, indice_faltas, efectivida_puerta, solidez_portero.
+
+Contexto de fichajes:
+1.- creacion_peligro: En caso de ser una debilidad, se requiere a un creador de juego, ya que es necesario alguien quien pueda generar jugadas de peligro.
+2.- resiliencia: En caso de ser una debilidad, se requiere a un regateador/asistente, ya que el equipo tiene voluntad, pero es necesario alguien quien marque diferencia para aprovechar esa voluntad.
+3.- peligro_ofensivo: En caso de ser debilidad, se requiere a un goleador, alguien quien sepa aprovechar las oportunidades.
+4.- solidez_defensiva:  En caso de ser debilidad, se requiere a un defensor/recuperador, alguien quien sea firme en la saga defensiva y corrija los problemas de recibir goles.
+5.- indice_faltas: En caso de ser debilidad, se requiere a un defensor/recuperador, alguien quien sea firme en la saga defensiva y corrija los problemas de la inseguridad cuando no se tiene el balon
+6.- efectividad_puerta: En caso de ser debilidad, se requiere a un goleador, alguien quien sepa corregir los tiros a puerta, que sea bueno anotando goles.
+7.- solidez_portero: En caso de ser debilidad, se requiere a un solidez portero, alguien quien sea seguro en la porteria
+
 Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario."""
 
     full_prompt = f"{system_instruction}\n\n{prompt}"
@@ -500,7 +538,7 @@ def main():
 
         team_row_preview = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
 
-        # Victorias, Empates, Derrotas (aquí; se quitaron de "Ver diagnóstico del equipo")
+        # Resultados: Victorias, Empates, Derrotas
         st.markdown("**Resultados (temporada)**")
         m1, m2, m3 = st.columns(3)
         with m1:
@@ -510,14 +548,17 @@ def main():
         with m3:
             st.metric("Derrotas", int(team_row_preview.get('Losses', 0)))
 
+        st.markdown("")  # Pequeño espacio antes de las gráficas
+        # Bloque de gráficas: dos columnas con espaciado uniforme
         col_chart1, col_chart2 = st.columns(2)
         with col_chart1:
             fig_desempeno = crear_grafico_desempeno_equipo(team_row_preview, equipo_seleccionado)
-            st.plotly_chart(fig_desempeno, use_container_width=True)
+            st.plotly_chart(fig_desempeno, use_container_width=True, key="chart_desempeno")
         with col_chart2:
             fig_minutos = crear_grafico_goles_por_minuto(team_row_preview, equipo_seleccionado)
-            st.plotly_chart(fig_minutos, use_container_width=True)
+            st.plotly_chart(fig_minutos, use_container_width=True, key="chart_minutos")
 
+        st.markdown("---")
         # Tabla: solo datos del equipo seleccionado (posesión y rating)
         st.markdown("**Posesión y rating de este equipo**")
         cols_tabla = ['team_name_x', 'ball_possession_total', 'games_rating']
