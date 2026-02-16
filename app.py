@@ -339,7 +339,7 @@ def obtener_respuesta_gemini(prompt, historial=None):
 
     system_instruction = """Eres un asistente experto en análisis de fútbol y scouting de jugadores. 
 Tu rol es ayudar al usuario a entender las gráficas de diagnóstico de equipos de Liga MX y guiarlo en la elección de jugadores recomendados.
-La app tiene 4 pasos: 1) Seleccionar equipo, 2) Ver gráficas generales 3)Ver gráficas de diagnóstico con debilidades, 4) Al presionar el botón, ver jugadores recomendados con filtros.
+La app tiene 3 pasos: 1) Seleccionar equipo, 2) Ver gráficas generales 3)Ver gráficas de diagnóstico con debilidades, 4) Al presionar el botón, ver jugadores recomendados con filtros.
 
 REGLAS DE ORO:
 1.- FLUJO OBLIGATORIO: Si el usuario no ha presionado el botón de 'BUSCAR REFUERZOS', debes responder amablemente que primero seleccionen un equipo y presionen el botón para que puedas analizar a los candidatos reales.
@@ -481,41 +481,51 @@ def main():
     if "equipo_con_recomendaciones" in st.session_state and st.session_state.equipo_con_recomendaciones != equipo_seleccionado:
         st.session_state.mostrar_recomendaciones = False
 
-    # ========== SECCIÓN NUEVA: Estadísticas por equipo (entre selección y diagnóstico) ==========
-    st.divider()
-    st.subheader("📈 Estadísticas por equipo")
-    st.caption("Gráficas de desempeño y tabla de posesión y rating. Luego usa el botón inferior para ver el diagnóstico detallado.")
+    # ========== SECCIÓN: Estadísticas por equipo (solo al tener equipo seleccionado, antes de "Ver diagnóstico") ==========
+    if equipo_seleccionado:
+        st.divider()
+        st.subheader(f"📈 Estadísticas de {equipo_seleccionado}")
+        st.caption("Gráficas y datos del equipo seleccionado. Luego usa el botón inferior para ver el diagnóstico detallado.")
 
-    team_row_preview = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
+        team_row_preview = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
 
-    col_chart1, col_chart2 = st.columns(2)
-    with col_chart1:
-        fig_desempeno = crear_grafico_desempeno_equipo(team_row_preview, equipo_seleccionado)
-        st.plotly_chart(fig_desempeno, use_container_width=True)
-    with col_chart2:
-        fig_minutos = crear_grafico_goles_por_minuto(team_row_preview, equipo_seleccionado)
-        st.plotly_chart(fig_minutos, use_container_width=True)
+        # Victorias, Empates, Derrotas (aquí; se quitaron de "Ver diagnóstico del equipo")
+        st.markdown("**Resultados (temporada)**")
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.metric("Victorias", int(team_row_preview.get('Wins', 0)))
+        with m2:
+            st.metric("Empates", int(team_row_preview.get('Draws', 0)))
+        with m3:
+            st.metric("Derrotas", int(team_row_preview.get('Losses', 0)))
 
-    # Tabla: ball_possession_total y games_rating por equipo (todos los equipos)
-    st.markdown("**Posesión y rating por equipo (Liga MX)**")
-    cols_tabla = ['team_name_x', 'ball_possession_total', 'games_rating']
-    cols_disponibles = [c for c in cols_tabla if c in df_diagnostico.columns]
-    if cols_disponibles:
-        df_tabla = df_diagnostico[cols_disponibles].copy()
-        if 'ball_possession_total' in df_tabla.columns:
-            df_tabla['ball_possession_total'] = pd.to_numeric(df_tabla['ball_possession_total'], errors='coerce')
-        if 'games_rating' in df_tabla.columns:
-            df_tabla['games_rating'] = pd.to_numeric(df_tabla['games_rating'], errors='coerce')
-        rename_map = {'team_name_x': 'Equipo', 'ball_possession_total': 'Posesión (%)', 'games_rating': 'Rating'}
-        df_tabla = df_tabla.rename(columns={k: v for k, v in rename_map.items() if k in df_tabla.columns})
-        # Mostrar posesión como porcentaje 0-100 si los valores están en 0-1
-        if 'Posesión (%)' in df_tabla.columns and df_tabla['Posesión (%)'].max() <= 1.5:
-            df_tabla['Posesión (%)'] = (df_tabla['Posesión (%)'] * 100).round(1)
-        st.dataframe(df_tabla, use_container_width=True, hide_index=True)
-    else:
-        st.info("No se encontraron las columnas ball_possession_total o games_rating en los datos.")
+        col_chart1, col_chart2 = st.columns(2)
+        with col_chart1:
+            fig_desempeno = crear_grafico_desempeno_equipo(team_row_preview, equipo_seleccionado)
+            st.plotly_chart(fig_desempeno, use_container_width=True)
+        with col_chart2:
+            fig_minutos = crear_grafico_goles_por_minuto(team_row_preview, equipo_seleccionado)
+            st.plotly_chart(fig_minutos, use_container_width=True)
 
-    st.divider()
+        # Tabla: solo datos del equipo seleccionado (posesión y rating)
+        st.markdown("**Posesión y rating de este equipo**")
+        cols_tabla = ['team_name_x', 'ball_possession_total', 'games_rating']
+        cols_disponibles = [c for c in cols_tabla if c in df_diagnostico.columns]
+        if cols_disponibles:
+            df_tabla = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado][cols_disponibles].copy()
+            if 'ball_possession_total' in df_tabla.columns:
+                df_tabla['ball_possession_total'] = pd.to_numeric(df_tabla['ball_possession_total'], errors='coerce')
+            if 'games_rating' in df_tabla.columns:
+                df_tabla['games_rating'] = pd.to_numeric(df_tabla['games_rating'], errors='coerce')
+            rename_map = {'team_name_x': 'Equipo', 'ball_possession_total': 'Posesión (%)', 'games_rating': 'Rating'}
+            df_tabla = df_tabla.rename(columns={k: v for k, v in rename_map.items() if k in df_tabla.columns})
+            if 'Posesión (%)' in df_tabla.columns and df_tabla['Posesión (%)'].max() <= 1.5:
+                df_tabla['Posesión (%)'] = (df_tabla['Posesión (%)'] * 100).round(1)
+            st.dataframe(df_tabla, use_container_width=True, hide_index=True)
+        else:
+            st.info("No se encontraron las columnas ball_possession_total o games_rating en los datos.")
+
+        st.divider()
 
     # Botón para ver el diagnóstico (el gráfico solo aparece después de elegir equipo)
     if st.button("📊 Ver diagnóstico del equipo", type="primary", use_container_width=True):
@@ -538,11 +548,6 @@ def main():
                 st.plotly_chart(fig_radar, use_container_width=True)
 
         with col2:
-            if 'Wins' in team_row.index:
-                st.metric("Victorias", int(team_row.get('Wins', 0)))
-                st.metric("Empates", int(team_row.get('Draws', 0)))
-                st.metric("Derrotas", int(team_row.get('Losses', 0)))
-
             st.markdown("**Debilidades detectadas (métricas más bajas):**")
             for i, d in enumerate(top3_debilidades, 1):
                 st.markdown(f"{i}. {d}")
