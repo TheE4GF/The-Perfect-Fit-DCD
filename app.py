@@ -114,8 +114,8 @@ def cargar_recomendacion_jugadores():
 
 def recomendar_refuerzos_integral(debilidad_prioritaria, presupuesto_max, n_opciones, df_players, 
                                    filtro_edad_min=None, filtro_edad_max=None, 
-                                   filtro_precio_max=None, filtro_contrato_min=None,
-                                   filtro_nacionalidad=None):
+                                   filtro_contrato_max=None, filtro_nacionalidad=None,
+                                   filtro_posicion=None):
     """
     Recomienda jugadores basado en debilidad prioritaria.
     Fidelidad a la función en pruebaproyectofinalmodulov_final.py
@@ -147,13 +147,13 @@ def recomendar_refuerzos_integral(debilidad_prioritaria, presupuesto_max, n_opci
         candidatos = candidatos[candidatos['player_age'].fillna(0) >= filtro_edad_min]
     if filtro_edad_max is not None:
         candidatos = candidatos[candidatos['player_age'].fillna(99) <= filtro_edad_max]
-    if filtro_precio_max is not None:
-        candidatos = candidatos[candidatos['transfermarkt_market_value'] <= filtro_precio_max]
-    if filtro_contrato_min is not None and 'contract_length_years' in candidatos.columns:
+    if filtro_contrato_max is not None and 'contract_length_years' in candidatos.columns:
         candidatos['contract_length_years'] = pd.to_numeric(candidatos['contract_length_years'], errors='coerce')
-        candidatos = candidatos[candidatos['contract_length_years'].fillna(0) >= filtro_contrato_min]
+        candidatos = candidatos[candidatos['contract_length_years'].fillna(999) <= filtro_contrato_max]
     if filtro_nacionalidad is not None and len(filtro_nacionalidad) > 0 and 'player_nationality' in candidatos.columns:
         candidatos = candidatos[candidatos['player_nationality'].fillna('').astype(str).str.strip().isin([str(n).strip() for n in filtro_nacionalidad])]
+    if filtro_posicion is not None and len(filtro_posicion) > 0 and 'games_position' in candidatos.columns:
+        candidatos = candidatos[candidatos['games_position'].fillna('').astype(str).str.strip().isin([str(p).strip() for p in filtro_posicion])]
 
     if candidatos.empty:
         return pd.DataFrame(), "No hay jugadores que cumplan los filtros aplicados."
@@ -538,16 +538,6 @@ def main():
 
         team_row_preview = df_diagnostico[df_diagnostico['team_name_x'] == equipo_seleccionado].iloc[0]
 
-        # Resultados: Victorias, Empates, Derrotas
-        st.markdown("**Resultados (temporada)**")
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            st.metric("Victorias", int(team_row_preview.get('Wins', 0)))
-        with m2:
-            st.metric("Empates", int(team_row_preview.get('Draws', 0)))
-        with m3:
-            st.metric("Derrotas", int(team_row_preview.get('Losses', 0)))
-
         st.markdown("")  # Pequeño espacio antes de las gráficas
         # Bloque de gráficas: dos columnas con espaciado uniforme
         col_chart1, col_chart2 = st.columns(2)
@@ -644,14 +634,15 @@ def main():
             usar_filtros = st.checkbox("Aplicar filtros extra", value=False)
             filtro_edad_min = None
             filtro_edad_max = None
-            filtro_precio_max = None
-            filtro_contrato_min = None
+            filtro_contrato_max = None
             filtro_nacionalidad = None
+            filtro_posicion = None
             if usar_filtros:
                 filtro_edad_min = st.number_input("Edad mínima", min_value=16, max_value=45, value=18)
                 filtro_edad_max = st.number_input("Edad máxima", min_value=16, max_value=45, value=35)
-                filtro_precio_max = st.number_input("Precio máximo adicional (M €)", min_value=0.5, max_value=100.0, value=20.0)
-                filtro_contrato_min = st.number_input("Mín. años de contrato restantes", min_value=0.0, max_value=5.0, value=0.0, step=0.5)
+                filtro_contrato_max = st.number_input("Máx. años de contrato restantes", min_value=0.0, max_value=5.0, value=5.0, step=0.5, help="Solo jugadores con ese tiempo o menos de contrato")
+                posiciones_disponibles = sorted([p for p in df_jugadores['games_position'].dropna().astype(str).unique().tolist() if str(p).strip()])
+                filtro_posicion = st.multiselect("Posición", options=posiciones_disponibles, default=None, help="Deja vacío para incluir todas (ej. Attacker, Defender, Goalkeeper)")
                 nacionalidades_disponibles = sorted(df_jugadores['player_nationality'].dropna().astype(str).unique().tolist())
                 filtro_nacionalidad = st.multiselect("Nacionalidad del jugador", options=nacionalidades_disponibles, default=None, help="Deja vacío para incluir todas")
 
@@ -659,9 +650,9 @@ def main():
             debilidad_usar, presupuesto_mdd, n_resultados, df_jugadores,
             filtro_edad_min=filtro_edad_min,
             filtro_edad_max=filtro_edad_max,
-            filtro_precio_max=filtro_precio_max,
-            filtro_contrato_min=filtro_contrato_min,
-            filtro_nacionalidad=filtro_nacionalidad
+            filtro_contrato_max=filtro_contrato_max,
+            filtro_nacionalidad=filtro_nacionalidad,
+            filtro_posicion=filtro_posicion
         )
 
         if error:
