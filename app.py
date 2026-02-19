@@ -397,9 +397,7 @@ Contexto de fichajes:
 6.- efectividad_puerta: En caso de ser debilidad, se requiere a un goleador, alguien quien sepa corregir los tiros a puerta, que sea bueno anotando goles.
 7.- solidez_portero: En caso de ser debilidad, se requiere a un solidez portero, alguien quien sea seguro en la porteria
 
-Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario. 
-
-Si el usuario pide aclaración (ej. "¿Cómo?"), responde solo lo que falta sin repetir la introducción."""
+Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario. Si el usuario pide aclaración (ej. "¿Cómo?"), responde solo lo que falta sin repetir la introducción."""
 
     # Incluir últimas vueltas del historial para contexto (máx. 6 mensajes para no saturar)
     historial_texto = ""
@@ -702,10 +700,19 @@ def main():
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        contexto = f"""
+        # Solo incluir diagnóstico y refuerzo si el usuario ya pulsó "Ver diagnóstico del equipo"
+        if st.session_state.mostrar_diagnostico:
+            contexto = f"""
 Equipo analizado: {equipo_seleccionado}
+El usuario YA vio el diagnóstico. Puedes hablar de él si pregunta.
 Debilidades detectadas: {', '.join(top3_refuerzos)}
 Tipo de refuerzo aplicado: {debilidad_usar}
+¿El usuario ya vio las recomendaciones de jugadores? {st.session_state.mostrar_recomendaciones}
+"""
+        else:
+            contexto = f"""
+Equipo analizado: {equipo_seleccionado}
+IMPORTANTE: El usuario AÚN NO ha pulsado el botón "Ver diagnóstico del equipo". NO reveles las debilidades ni el tipo de refuerzo sugerido. Indícale amablemente que debe pulsar ese botón para ver el diagnóstico en la app.
 ¿El usuario ya vio las recomendaciones de jugadores? {st.session_state.mostrar_recomendaciones}
 """
         # Historial sin el mensaje actual para no duplicar la pregunta en el prompt
