@@ -397,9 +397,21 @@ Contexto de fichajes:
 6.- efectividad_puerta: En caso de ser debilidad, se requiere a un goleador, alguien quien sepa corregir los tiros a puerta, que sea bueno anotando goles.
 7.- solidez_portero: En caso de ser debilidad, se requiere a un solidez portero, alguien quien sea seguro en la porteria
 
-Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario."""
+Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario. 
 
-    full_prompt = f"{system_instruction}\n\n{prompt}"
+Si el usuario pide aclaración (ej. "¿Cómo?"), responde solo lo que falta sin repetir la introducción."""
+
+    # Incluir últimas vueltas del historial para contexto (máx. 6 mensajes para no saturar)
+    historial_texto = ""
+    if historial and len(historial) > 0:
+        ultimos = historial[-(6):]
+        for m in ultimos:
+            rol = "Usuario" if m.get("role") == "user" else "Asistente"
+            historial_texto += f"{rol}: {m.get('content', '')}\n\n"
+    if historial_texto:
+        full_prompt = f"{system_instruction}\n\n--- Conversación reciente ---\n{historial_texto}--- Fin conversación ---\n\n{prompt}"
+    else:
+        full_prompt = f"{system_instruction}\n\n{prompt}"
 
     # Opción 1: Obtener modelos disponibles vía REST y probar cada uno
     try:
@@ -418,14 +430,21 @@ Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario
                 gen_url = f"https://generativelanguage.googleapis.com/{api_version}/models/{name}:generateContent?key={api_key}"
                 payload = {
                     "contents": [{"parts": [{"text": full_prompt}]}],
-                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1024}
+                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096}
                 }
                 try:
-                    resp = requests.post(gen_url, json=payload, timeout=30)
+                    resp = requests.post(gen_url, json=payload, timeout=60)
                     if resp.status_code == 200:
                         data = resp.json()
-                        text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        cands = data.get("candidates", [{}])
+                        if not cands:
+                            continue
+                        c = cands[0]
+                        text = c.get("content", {}).get("parts", [{}])[0].get("text", "")
+                        finish = c.get("finishReason", "")
                         if text:
+                            if finish == "MAX_TOKENS":
+                                text += "\n\n*(La respuesta se recortó por límite de longitud. Puedes preguntar de nuevo en partes más específicas si necesitas más detalle.)*"
                             return text
                 except Exception:
                     continue
@@ -440,13 +459,20 @@ Explica de forma clara y concisa. Responde en el mismo idioma que use el usuario
                 url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model}:generateContent?key={api_key}"
                 payload = {
                     "contents": [{"parts": [{"text": full_prompt}]}],
-                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1024}
+                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096}
                 }
-                resp = requests.post(url, json=payload, timeout=30)
+                resp = requests.post(url, json=payload, timeout=60)
                 if resp.status_code == 200:
                     data = resp.json()
-                    text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    cands = data.get("candidates", [{}])
+                    if not cands:
+                        continue
+                    c = cands[0]
+                    text = c.get("content", {}).get("parts", [{}])[0].get("text", "")
+                    finish = c.get("finishReason", "")
                     if text:
+                        if finish == "MAX_TOKENS":
+                            text += "\n\n*(La respuesta se recortó por límite de longitud. Puedes preguntar de nuevo en partes más específicas si necesitas más detalle.)*"
                         return text
             except Exception:
                 continue
@@ -682,7 +708,12 @@ Debilidades detectadas: {', '.join(top3_refuerzos)}
 Tipo de refuerzo aplicado: {debilidad_usar}
 ¿El usuario ya vio las recomendaciones de jugadores? {st.session_state.mostrar_recomendaciones}
 """
-        respuesta = obtener_respuesta_gemini(contexto + "\n\nPregunta del usuario: " + prompt)
+        # Historial sin el mensaje actual para no duplicar la pregunta en el prompt
+        historial_previo = st.session_state.messages_gemini[:-1] if st.session_state.messages_gemini else []
+        respuesta = obtener_respuesta_gemini(
+            contexto + "\n\nPregunta del usuario: " + prompt,
+            historial=historial_previo
+        )
 
         with st.chat_message("assistant"):
             st.markdown(respuesta)
